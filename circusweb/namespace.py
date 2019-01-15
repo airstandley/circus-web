@@ -8,9 +8,16 @@ class SocketIOConnection(tornadio2.SocketConnection):
 
     participants = defaultdict(set)
 
-    def __init__(self, *args, **kwargs):
-        super(SocketIOConnection, self).__init__(*args, **kwargs)
+    def __init__(self, session, endpoint=None):
+        super(SocketIOConnection, self).__init__(session, endpoint=endpoint)
         self.stats_endpoints = []
+
+    def on_message(self, message):
+        return super().on_message(message)
+
+    def on_open(self, request):
+        allowed = super().on_open(request)
+        return allowed
 
     def on_close(self):
         from circusweb.session import get_controller  # Circular import
@@ -18,6 +25,10 @@ class SocketIOConnection(tornadio2.SocketConnection):
         for endpoint in self.stats_endpoints:
             self.participants[endpoint].discard(self)
             controller.disconnect_stats_endpoint(endpoint)
+        return super().on_close()
+
+    def on_event(self, name, args=[], kwargs=dict()):
+        return super().on_event(name, args, kwargs)
 
     @tornadio2.event
     @gen.coroutine
@@ -27,19 +38,18 @@ class SocketIOConnection(tornadio2.SocketConnection):
         controller = get_controller()
 
         for watcher_tuple in watchersWithPids:
-            watcher, encoded_endpoint = watcher_tuple
-            endpoint = b64decode(encoded_endpoint)
+            watcher, endpoint = watcher_tuple
             if watcher == "sockets":
                 sockets = yield gen.Task(controller.get_sockets,
                                          endpoint=endpoint)
                 fds = [s['fd'] for s in sockets]
                 self.emit('socket-stats-fds-{endpoint}'.format(
-                    endpoint=encoded_endpoint), fds=fds)
+                    endpoint=endpoint), fds=fds)
             else:
                 pids = yield gen.Task(controller.get_pids, watcher, endpoint)
                 pids = [int(pid) for pid in pids]
                 channel = 'stats-{watcher}-pids-{endpoint}'.format(
-                    watcher=watcher, endpoint=encoded_endpoint)
+                    watcher=watcher, endpoint=endpoint)
                 self.emit(channel, pids=pids)
 
         self.watchers = watchers
@@ -54,7 +64,7 @@ class SocketIOConnection(tornadio2.SocketConnection):
 
     @classmethod
     def consume_stats(cls, watcher, pid, stat, stat_endpoint):
-        stat_endpoint_b64 = b64encode(stat_endpoint)
+        stat_endpoint_b64 = stat_endpoint
         for p in cls.participants[stat_endpoint]:
             if watcher == 'sockets':
                 # if we get information about sockets and we explicitely

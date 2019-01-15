@@ -27,10 +27,10 @@
         </div>
 
         <div class="stat">
-            <div id="socket-stats-${socket['fd']}-${b64encode(controller.get_client(endpoint).stats_endpoint)}" class="graph"></div>
+            <div id="socket-stats-${socket['fd']}-${b64encode(controller.get_client(endpoint).stats_endpoint.encode('utf-8'))}" class="graph"></div>
             <div class="metrics">
                 <span class="metric_label">Reads</span>
-                <span class="metric_value" id="socket-stats-${socket['fd']}-${b64encode(controller.get_client(endpoint).stats_endpoint)}_last_reads">0.0</span>
+                <span class="metric_value" id="socket-stats-${socket['fd']}-${b64encode(controller.get_client(endpoint).stats_endpoint.encode('utf-8'))}_last_reads">0.0</span>
              </div>
         </div>
     </div>
@@ -45,9 +45,9 @@
         var watchers = [];
         var stats_endpoints = [];
         % for endpoint in sockets.keys():
-            watchers.push(['sockets', ${dumps(b64encode(controller.get_client(endpoint).stats_endpoint))}, ${dumps(b64encode(endpoint))}]);
+            watchers.push(['sockets', ${dumps(controller.get_client(endpoint).stats_endpoint)}, ${dumps(endpoint)}]);
             stats_endpoints.push(${dumps(controller.get_client(endpoint).stats_endpoint)});
         % endfor
-        supervise(socket, [], watchers, ${dumps(sockets.keys())}, stats_endpoints);
+        supervise(socket, [], watchers, ${dumps(list(sockets.keys()))}, stats_endpoints);
     });
 </script>

@@ -77,7 +77,7 @@ class BaseHandler(tornado.web.RequestHandler):
     def prepare(self):
         session_id = self.get_secure_cookie('session_id')
         if not session_id or not SessionManager.get(session_id):
-            session_id = uuid4().hex
+            session_id = uuid4().hex.encode(encoding='utf-8')
             session = SessionManager.new(session_id)
             self.set_secure_cookie('session_id', session_id)
         else:
@@ -157,14 +157,17 @@ class ConnectHandler(BaseHandler):
     @tornado.web.asynchronous
     @gen.coroutine
     def post(self):
-        endpoints_list = list(self.session.endpoints)
-        endpoints = self.get_arguments('endpoint_list', strip=False)
+        endpoints_list = self.get_arguments('endpoint_list', strip=False)
+        endpoint_direct = self.get_arguments('endpoint_direct', strip=False)
 
         # If no selection in list
-        if not endpoints:
-            endpoints = self.get_arguments('endpoint_direct', strip=False)
+        if endpoints_list:
+            endpoints = endpoints_list
+        else:
+            endpoints = endpoint_direct
 
         if not endpoints:
+            logger.info('No Endpoints Found; Disconnecting.')
             self.redirect(self.reverse_url('disconnect'))
             raise StopIteration()
 
@@ -173,7 +176,8 @@ class ConnectHandler(BaseHandler):
                 yield gen.Task(connect_to_circus,
                                tornado.ioloop.IOLoop.instance(),
                                endpoint)
-            except CallError:
+            except CallError as e:
+                logger.debug('Endpoint "{}" CallError: {}'.format(endpoint, e))
                 self.session.messages.append("Impossible to connect to %s" %
                                              endpoint)
             else:
@@ -206,7 +210,7 @@ class WatcherAddHandler(BaseHandler):
             'add_watcher',
             kwargs=dict((k, v[0]) for k, v in
                         self.request.arguments.iteritems()),
-            message='added a new watcher', endpoint=b64decode(endpoint),
+            message='added a new watcher', endpoint=b64decode(endpoint).decode('utf-8'),
             redirect_url=self.reverse_url('watcher',
                                           endpoint,
                                           self.get_argument('name').lower()),
@@ -221,7 +225,7 @@ class WatcherHandler(BaseHandler):
     @gen.coroutine
     def get(self, endpoint, name):
         controller = get_controller()
-        endpoint = b64decode(endpoint)
+        endpoint = b64decode(endpoint).decode('utf-8')
         pids = yield gen.Task(controller.get_pids, name, endpoint)
         self.finish(self.render_template('watcher.html', pids=pids, name=name,
                                          endpoint=endpoint))
@@ -235,7 +239,7 @@ class WatcherSwitchStatusHandler(BaseHandler):
     def get(self, endpoint, name):
         url = yield self.run_command(command='switch_status',
                                      message='status switched',
-                                     endpoint=b64decode(endpoint),
+                                     endpoint=b64decode(endpoint).decode('utf-8'),
                                      args=(name,),
                                      redirect_url=self.reverse_url('index'))
         self.redirect(url)
@@ -251,7 +255,7 @@ class KillProcessHandler(BaseHandler):
         url = yield self.run_command(
             command='killproc',
             message=msg.format(pid=pid),
-            endpoint=b64decode(endpoint),
+            endpoint=b64decode(endpoint).decode('utf-8'),
             args=(name, pid),
             redirect_url=self.reverse_url('watcher', endpoint, name))
         self.redirect(url)
@@ -266,7 +270,7 @@ class DecrProcHandler(BaseHandler):
         msg = 'removed one process from the {watcher} pool'
         url = yield self.run_command(command='decrproc',
                                      message=msg.format(watcher=name),
-                                     endpoint=b64decode(endpoint),
+                                     endpoint=b64decode(endpoint).decode('utf-8'),
                                      args=(name,),
                                      redirect_url=self.reverse_url('watcher',
                                                                    endpoint,
@@ -283,7 +287,7 @@ class IncrProcHandler(BaseHandler):
         msg = 'added one process to the {watcher} pool'
         url = yield self.run_command(command='incrproc',
                                      message=msg.format(watcher=name),
-                                     endpoint=b64decode(endpoint),
+                                     endpoint=b64decode(endpoint).decode('utf-8'),
                                      args=(name,),
                                      redirect_url=self.reverse_url('watcher',
                                                                    endpoint,
@@ -301,7 +305,7 @@ class SocketsHandler(BaseHandler):
         sockets = {}
 
         if endpoint:
-            endpoint = b64decode(endpoint)
+            endpoint = b64decode(endpoint).decode('utf-8')
             sockets[endpoint] = yield gen.Task(controller.get_sockets,
                                                endpoint=endpoint)
         else:
@@ -325,7 +329,7 @@ class ReloadconfigHandler(BaseHandler):
     def get(self, endpoint):
         url = yield self.run_command(command='reloadconfig',
                                      message='reload the configuration',
-                                     endpoint=b64decode(endpoint),
+                                     endpoint=b64decode(endpoint).decode('utf-8'),
                                      args=[],
                                      redirect_url=self.reverse_url('index'))
         self.redirect(url)

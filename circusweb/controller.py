@@ -59,6 +59,7 @@ class Controller(object):
             del self.stats_clients[stats_endpoint]
 
     def get_client(self, endpoint):
+        endpoint = str(endpoint)
         return self.clients.get(endpoint)
 
     @gen.coroutine
